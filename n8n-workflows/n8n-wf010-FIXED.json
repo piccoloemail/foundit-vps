@@ -1,0 +1,411 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "youtube-transcript",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -580,
+        -700
+      ],
+      "id": "aa11fbfb-5521-46ca-b3f9-18950288ac0a",
+      "name": "Webhook",
+      "webhookId": "2acd4399-e7e9-46dd-aeeb-b6d9eb722f13"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Los datos están directamente en body\n  const inputData = $input.first().json;\n  const requestBody = inputData.body;\n\n  console.log('YouTube URL recibida:', requestBody.youtube_url);\n\n  const youtubeUrl = requestBody.youtube_url;\n  const memoryId = requestBody.memory_id;\n\n  // Verificar datos\n  if (!youtubeUrl) {\n    throw new Error('youtube_url no encontrado en body');\n  }\n\n  // Extraer video ID\n  let videoId = '';\n  if (youtubeUrl.includes('watch?v=')) {\n    videoId = youtubeUrl.split('watch?v=')[1].split('&')[0];\n  } else if (youtubeUrl.includes('youtu.be/')) {\n    videoId = youtubeUrl.split('youtu.be/')[1].split('?')[0];\n  }\n\n  console.log('Video ID extraído:', videoId);\n\n  if (!videoId) {\n    throw new Error('No se pudo extraer video ID');\n  }\n\n  return {\n    video_id: videoId,\n    youtube_url: youtubeUrl,\n    memory_id: memoryId,\n    timestamp: new Date().toISOString(),\n    status: 'ready_for_processing'\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        -700
+      ],
+      "id": "0e89e155-fa65-4438-a820-739b22a30a9b",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.youtube.com/oembed?url={{$json.youtube_url}}&format=json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        -700
+      ],
+      "id": "7e1b764d-0ece-480f-8b98-db9e812cba3c",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener datos del HTTP Request (nodo anterior)\n  const httpData = $input.first().json;\n\n  // Obtener datos originales del Code Node (buscar en el contexto)\n  const originalData = $(\"Code\").first().json;\n// Tu código actual...\n  const result = {\n    video_id: originalData.video_id,\n    youtube_url: originalData.youtube_url,\n    // ... resto de datos\n  };\n\n  // DEBUG: Log la ruta del archivo\n  console.log('File path will be:', `/tmp/${result.video_id}.mp3`);\n\n  return result;\n\n  // Combinar ambos datos\n  return {\n    // Datos originales del Code Node\n    video_id: originalData.video_id,\n    youtube_url: originalData.youtube_url,\n    memory_id: originalData.memory_id,\n    timestamp: originalData.timestamp,\n    status: originalData.status,\n\n    // Datos del HTTP Request\n    video_title: httpData.title,\n    author_name: httpData.author_name,\n    thumbnail_url: httpData.thumbnail_url\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        -700
+      ],
+      "id": "d7a587dd-a0ae-4247-9bb7-9a209011e925",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "command": "=/opt/homebrew/bin/yt-dlp -x --audio-format mp3 --ffmpeg-location /opt/homebrew/bin/ffmpeg -o \"/tmp/{{$json.video_id}}.mp3\" \"{{$json.youtube_url}}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -480
+      ],
+      "id": "ca9e5ede-6f25-480e-8fb2-f26e58c32979",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{$json.file_path}}",
+        "options": {
+          "dataPropertyName": "audioFile"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -180,
+        -480
+      ],
+      "id": "35619fac-8813-4e01-bade-770915d13563",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "8838199251774cf68a3ffe33b92083ee"
+            },
+            {
+              "name": "content-type",
+              "value": "application/octet-stream"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "audioFile",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        20,
+        -480
+      ],
+      "id": "78658584-39a0-42df-9884-7863e0110035",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener el video_id del contexto anterior\n  const videoId = $node[\"Code1\"].json.video_id ||\n  $input.first().json.video_id;\n\n  return {\n    video_id: videoId,\n    file_path: `/tmp/${videoId}.mp3`,\n    youtube_url: $input.first().json.youtube_url,\n    memory_id: $input.first().json.memory_id\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        -480
+      ],
+      "id": "23204714-3951-4ded-a9b5-4ba60823151c",
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/transcript",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "8838199251774cf68a3ffe33b92083ee"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"audio_url\": \"{{$json.upload_url}}\",\n    \"language_detection\": true,\n    \"punctuate\": true,\n    \"format_text\": true\n  }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -820,
+        -240
+      ],
+      "id": "aca66310-3948-4092-925f-36e4ce8ee99a",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        -240
+      ],
+      "id": "f4817a2a-2dac-403f-befc-263e67dfe54b",
+      "name": "Wait",
+      "webhookId": "9427707a-065e-4c68-b0c2-119e84958a29"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.assemblyai.com/v2/transcript/{{$node[\"HTTP Request2\"].json.id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "8838199251774cf68a3ffe33b92083ee"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -380,
+        -240
+      ],
+      "id": "571ac9dd-4b73-42fb-b189-b61a9e5f0e1f",
+      "name": "HTTP Request3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "20348931-9015-4d2f-a30e-49e4a95f8d68",
+              "leftValue": "={{$json.status}}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -180,
+        -240
+      ],
+      "id": "520346df-4566-43f8-9c57-efd5534b0cee",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// TIMESTAMPS CORREGIDOS - AssemblyAI devuelve MILISEGUNDOS\nconst words = $json.words || [];\nconst fullTranscript = $json.text || '';\n\n// Crear segments con timestamps cada ~15 palabras y timestamps correctos\nlet transcriptWithTimestamps = '';\nconst segments = [];\n\nif (words.length > 0) {\n  let currentSegment = '';\n  let wordsInSegment = 0;\n  const WORDS_PER_SEGMENT = 15;\n  \n  words.forEach((word, index) => {\n    if (wordsInSegment === 0) {\n      if (currentSegment) {\n        transcriptWithTimestamps += currentSegment.trim() + '\\n\\n';\n      }\n      \n      // CORRECCIÓN: AssemblyAI devuelve milisegundos, convertir a segundos\n      const timeInSeconds = word.start / 1000;\n      \n      const minutes = Math.floor(timeInSeconds / 60);\n      const seconds = Math.floor(timeInSeconds % 60);\n      transcriptWithTimestamps += `${minutes}:${seconds.toString().padStart(2, '0')}\\n`;\n      currentSegment = '';\n    }\n    \n    currentSegment += word.text + ' ';\n    wordsInSegment++;\n    \n    const shouldEndSegment = \n      wordsInSegment >= WORDS_PER_SEGMENT ||\n      (word.text.match(/[.!?]$/) && wordsInSegment >= 8) ||\n      index === words.length - 1;\n    \n    if (shouldEndSegment) {\n      wordsInSegment = 0;\n    }\n  });\n  \n  if (currentSegment.trim()) {\n    transcriptWithTimestamps += currentSegment.trim();\n  }\n  \n  // Crear segments array también con timestamps corregidos\n  let currentSegmentObj = {\n    start: 0,\n    text: '',\n    words: []\n  };\n\n  words.forEach((word, index) => {\n    currentSegmentObj.words.push(word);\n    currentSegmentObj.text += word.text + ' ';\n\n    // CORRECCIÓN: Convertir milisegundos a segundos para segments\n    const wordEndSeconds = word.end / 1000;\n    const segmentStartSeconds = currentSegmentObj.start / 1000;\n\n    // Crear nuevo segmento cada 30 segundos o al final\n    if ((wordEndSeconds - segmentStartSeconds) > 30 || index === words.length - 1) {\n      segments.push({\n        start: currentSegmentObj.start / 1000,  // Convertir a segundos\n        end: word.end / 1000,                   // Convertir a segundos\n        text: currentSegmentObj.text.trim()\n      });\n\n      if (index < words.length - 1) {\n        currentSegmentObj = {\n          start: word.end,\n          text: '',\n          words: []\n        };\n      }\n    }\n  });\n} else {\n  transcriptWithTimestamps = fullTranscript;\n}\n\nreturn {\n  status: \"completed\",\n  transcript: fullTranscript,\n  transcriptWithTimestamps: transcriptWithTimestamps.trim(),\n  segments: segments,\n  words: words,\n  video_id: $node[\"Code1\"].json.video_id,\n  youtube_url: $node[\"Code1\"].json.youtube_url,\n  memory_id: $node[\"Code1\"].json.memory_id,\n  duration: words.length > 0 ? words[words.length - 1].end / 1000 : 0  // También convertir duración\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        -260
+      ],
+      "id": "38c7c9ac-8796-43bd-8dd7-0814b684ad8c",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('Transcript not ready after 30 seconds. Try again later.');"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        -100
+      ],
+      "id": "42cc0c64-5b42-48b0-b50c-f68509f4acc1",
+      "name": "Code4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "36544341-72fe-488e-af66-0dba69585756",
+  "meta": {
+    "instanceId": "13486551a96b5e80332be633257d50a3f0a90fc2e3bcc588cab6fa3322dff0f2"
+  },
+  "id": "omjBBNbj2CfLWiBv",
+  "tags": []
+}

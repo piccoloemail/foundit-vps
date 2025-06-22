@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - N8N_PUSH_BACKEND=websocket
+      - EXECUTIONS_MODE=regular
+      - N8N_METRICS=true
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=true
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./local_files:/files
+      - ./custom_nodes:/home/node/.n8n/custom
+    command: >
+      sh -c "
+        apk add --no-cache python3 py3-pip ffmpeg &&
+        pip3 install yt-dlp &&
+        n8n start
+      "
+
+  # Opcional: PostgreSQL para mejor performance
+  postgres:
+    image: postgres:15
+    container_name: n8n_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=n8n
+      - POSTGRES_DB=n8n
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
